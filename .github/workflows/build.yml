@@ -16,11 +16,11 @@ jobs:
 
       - name: Build binary
         run: |
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -tags netgo -trimpath -o go-proxy-bingai main.go
+          go build -ldflags="-s -w" -tags netgo -trimpath
 
       - name: Create Release and Upload Release Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            go-proxy-bingai
+            bingai-proxy

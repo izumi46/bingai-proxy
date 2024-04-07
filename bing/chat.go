@@ -1,12 +1,12 @@
 package bing
 
 import (
-	"adams549659584/go-proxy-bingai/request"
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"izumi46/bingai-proxy/request"
 	"mime/multipart"
 	"net/http"
 	"net/url"

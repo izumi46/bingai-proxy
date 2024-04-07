@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	_        = godotenv.Load()
-	HOSTNAME string
-	PORT     string
+	_             = godotenv.Load()
+	HOSTNAME      string
+	PORT          string
+	DOMAIN_SOCKET string
 	// user token
 	USER_Token string
 	// USer Cookie
@@ -33,6 +34,7 @@ func init() {
 	if PORT == "" {
 		PORT = "8080"
 	}
+	DOMAIN_SOCKET = os.Getenv("DOMAIN_SOCKET")
 	// KievRPSSecAuth Cookie
 	USER_KievRPSSecAuth = os.Getenv("USER_KievRPSSecAuth")
 	// MUID Cookie

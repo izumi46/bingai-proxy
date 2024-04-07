@@ -1,4 +1,4 @@
-module adams549659584/go-proxy-bingai
+module izumi46/bingai-proxy
 
 go 1.21.4
 

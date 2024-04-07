@@ -1,7 +1,7 @@
 package api
 
 import (
-	"adams549659584/go-proxy-bingai/common"
+	"izumi46/bingai-proxy/common"
 )
 
 var Cookie string

@@ -1,8 +1,8 @@
 package bing
 
 import (
-	"adams549659584/go-proxy-bingai/request"
 	"fmt"
+	"izumi46/bingai-proxy/request"
 	"net/url"
 	"strings"
 	"time"

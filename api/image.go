@@ -1,10 +1,10 @@
 package api
 
 import (
-	"adams549659584/go-proxy-bingai/bing"
-	"adams549659584/go-proxy-bingai/common"
 	"encoding/json"
 	"io"
+	"izumi46/bingai-proxy/bing"
+	"izumi46/bingai-proxy/common"
 	"net/http"
 	"time"
 )

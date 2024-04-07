@@ -1,7 +1,7 @@
 package api
 
 import (
-	"adams549659584/go-proxy-bingai/bing"
+	"izumi46/bingai-proxy/bing"
 )
 
 type chatRequest struct {
