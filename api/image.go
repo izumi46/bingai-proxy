@@ -1,20 +1,12 @@
-package v1
+package api
 
 import (
+	"adams549659584/go-proxy-bingai/bing"
 	"adams549659584/go-proxy-bingai/common"
 	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
 	"time"
-
-	binglib "github.com/Harry-zklcdc/bing-lib"
-)
-
-var (
-	globalImage *binglib.Image
-
-	DALL_E_3 = "dall-e-3"
 )
 
 func ImageHandler(w http.ResponseWriter, r *http.Request) {
@@ -35,20 +27,7 @@ func ImageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if apikey != "" && r.Header.Get("Authorization") != "Bearer "+apikey {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
-		return
-	}
-
-	image := globalImage.Clone()
-	image.SetXFF(common.GetRandomIP())
-
-	cookie := r.Header.Get("Cookie")
-	if cookie == "" || !strings.Contains(cookie, "_U=") {
-		cookie = image.GetCookies()
-	}
-	image.SetCookies(cookie)
+	image := bing.NewImage(Cookie)
 
 	resqB, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -59,7 +38,13 @@ func ImageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var resq imageRequest
-	json.Unmarshal(resqB, &resq)
+	err = json.Unmarshal(resqB, &resq)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		common.Logger.Error("Unmarshal Error: %v", err)
+		return
+	}
 
 	resp := imageResponse{
 		Created: time.Now().Unix(),
