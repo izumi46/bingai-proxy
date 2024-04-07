@@ -1,6 +1,0 @@
-{
-  "name": "Go Proxy BingAI",
-  "build": {
-    "dockerfile": "./Dockerfile"
-  }
-}
