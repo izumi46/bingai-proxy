@@ -2,7 +2,8 @@ package bing
 
 import (
 	"fmt"
-	"izumi46/bingai-proxy/request"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -23,62 +24,101 @@ func NewImage(cookies string) *Image {
 }
 
 func (image *Image) Image(q string) ([]string, string, error) {
-	var res []string
-
-	c := request.NewRequest()
-	c.Post().SetUrl(bingImageCreateUrl, image.BingBaseUrl, url.QueryEscape(q)).
-		SetBody(strings.NewReader(url.QueryEscape(fmt.Sprintf("q=%s&qs=ds", q)))).
-		SetContentType("application/x-www-form-urlencoded").
-		SetHeader("Cookie", image.cookies).
-		SetHeader("User-Agent", userAgent).
-		SetHeader("Origin", "https://www.bing.com").
-		SetHeader("Referer", "https://www.bing.com/images/create/").
-		Do()
-	if c.Result.Status != 302 {
-		return res, "", fmt.Errorf("status code: %d", c.Result.Status)
+	URL := fmt.Sprintf(bingImageCreateUrl, image.BingBaseUrl, url.QueryEscape(q))
+	body := strings.NewReader(url.QueryEscape(fmt.Sprintf("q=%s&qs=ds", q)))
+	req, err := http.NewRequest("POST", URL, body)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Origin", "https://www.bing.com")
+	req.Header.Set("Referer", "https://www.bing.com/images/create/")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Cookie", image.cookies)
+	req.Header.Set("User-Agent", userAgent)
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	if res.StatusCode != 302 {
+		return nil, "", fmt.Errorf("unexpected status code: %d", res.StatusCode)
 	}
 
-	u, _ := url.Parse(fmt.Sprintf("%s%s", image.BingBaseUrl, c.GetHeader("Location")))
-	c.Get().SetUrl("%s%s", image.BingBaseUrl, c.GetHeader("Location")).Do()
-	if c.Result.Status != 200 {
-		return res, "", fmt.Errorf("status code: %d", c.Result.Status)
+	for _, cookie := range res.Cookies() {
+		req.AddCookie(cookie)
+	}
+	newURL, err := url.Parse(fmt.Sprintf("%s%s", image.BingBaseUrl, req.Header.Get("Location")))
+	if err != nil {
+		return nil, "", err
+	}
+	req.Method = "GET"
+	req.URL = newURL
+	res, err = client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	if res.StatusCode != 200 {
+		return nil, "", fmt.Errorf("unexpected status code: %d", res.StatusCode)
+	}
+	for _, cookie := range res.Cookies() {
+		req.AddCookie(cookie)
 	}
 
-	id := u.Query().Get("id")
+	id := newURL.Query().Get("id")
 	// fmt.Println(id)
 
-	i := 0
-	for i < 120 {
+	var bytes []byte
+	for i := 0; i < 120; i++ {
 		time.Sleep(1 * time.Second)
-		i++
-		c.Get().SetUrl(bingImageResult, image.BingBaseUrl, id).Do()
-		if len(c.GetBodyString()) > 1 && strings.Contains(c.GetHeader("Content-Type"), "text/html") {
+
+		req.URL, err = url.Parse(fmt.Sprintf(bingImageResult, image.BingBaseUrl, id))
+		if err != nil {
+			continue
+		}
+		res, err = client.Do(req)
+		if err != nil {
+			continue
+		}
+		defer res.Body.Close()
+		bytes, err = io.ReadAll(res.Body)
+		if err != nil {
+			continue
+		}
+
+		if len(string(bytes)) > 1 && strings.Contains(res.Header.Get("Content-Type"), "text/html") {
 			break
 		}
 	}
 
-	if i >= 120 {
-		return res, "", fmt.Errorf("timeout")
-	}
-
-	// fmt.Println(c.GetBodyString())
-	body, err := html.Parse(strings.NewReader(c.GetBodyString()))
 	if err != nil {
-		return res, id, err
+		return nil, id, err
+	}
+	if !(len(string(bytes)) > 1 && strings.Contains(res.Header.Get("Content-Type"), "text/html")) {
+		return nil, "", fmt.Errorf("timeout")
 	}
 
-	findImgs(body, &res)
+	node, err := html.Parse(strings.NewReader(string(bytes)))
+	if err != nil {
+		return nil, id, err
+	}
 
-	var tmp []string
-	for i := range res {
-		if !strings.Contains(res[i], "/rp/") {
-			url, _ := url.Parse(res[i])
+	var images []string
+	findImgs(node, &images)
+
+	var results []string
+	for i := range images {
+		if !strings.Contains(images[i], "/rp/") {
+			url, _ := url.Parse(images[i])
 			url.RawQuery = ""
-			tmp = append(tmp, url.String())
+			results = append(results, url.String())
 		}
 	}
 
-	return tmp, id, nil
+	return results, id, nil
 }
 
 func findImgs(n *html.Node, vals *[]string) {

@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"izumi46/bingai-proxy/request"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -18,30 +18,30 @@ import (
 )
 
 const (
-	PRECISE          = "Precise"          // 精准
-	BALANCED         = "Balanced"         // 平衡
-	CREATIVE         = "Creative"         // 创造
-	PRECISE_OFFLINE  = "Precise-offline"  // 精准, 不联网搜索
-	BALANCED_OFFLINE = "Balanced-offline" // 平衡, 不联网搜索
-	CREATIVE_OFFLINE = "Creative-offline" // 创造, 不联网搜索
+	PRECISE          = "Precise"
+	BALANCED         = "Balanced"
+	CREATIVE         = "Creative"
+	PRECISE_OFFLINE  = "Precise-offline"
+	BALANCED_OFFLINE = "Balanced-offline"
+	CREATIVE_OFFLINE = "Creative-offline"
 
-	PRECISE_G4T          = "Precise-g4t"          // 精准 GPT4-Turbo
-	BALANCED_G4T         = "Balanced-g4t"         // 平衡 GPT4-Turbo
-	CREATIVE_G4T         = "Creative-g4t"         // 创造 GPT4-Turbo
-	PRECISE_G4T_OFFLINE  = "Precise-g4t-offline"  // 精准 GPT4-Turbo, 不联网搜索
-	BALANCED_G4T_OFFLINE = "Balanced-g4t-offline" // 平衡 GPT4-Turbo, 不联网搜索
-	CREATIVE_G4T_OFFLINE = "Creative-g4t-offline" // 创造 GPT4-Turbo, 不联网搜索
+	PRECISE_G4T          = "Precise-g4t"
+	BALANCED_G4T         = "Balanced-g4t"
+	CREATIVE_G4T         = "Creative-g4t"
+	PRECISE_G4T_OFFLINE  = "Precise-g4t-offline"
+	BALANCED_G4T_OFFLINE = "Balanced-g4t-offline"
+	CREATIVE_G4T_OFFLINE = "Creative-g4t-offline"
 
-	PRECISE_18K          = "Precise-18k"          // 精准, 18k上下文
-	BALANCED_18K         = "Balanced-18k"         // 平衡, 18k上下文
-	CREATIVE_18K         = "Creative-18k"         // 创造, 18k上下文
-	PRECISE_18K_OFFLINE  = "Precise-18k-offline"  // 精准, 18k上下文, 不联网搜索
-	BALANCED_18K_OFFLINE = "Balanced-18k-offline" // 平衡, 18k上下文, 不联网搜索
-	CREATIVE_18K_OFFLINE = "Creative-18k-offline" // 创造, 18k上下文, 不联网搜索
+	PRECISE_18K          = "Precise-18k"
+	BALANCED_18K         = "Balanced-18k"
+	CREATIVE_18K         = "Creative-18k"
+	PRECISE_18K_OFFLINE  = "Precise-18k-offline"
+	BALANCED_18K_OFFLINE = "Balanced-18k-offline"
+	CREATIVE_18K_OFFLINE = "Creative-18k-offline"
 
-	PRECISE_G4T_18K  = "Precise-g4t-18k"  // 精准 GPT4-Turbo, 18k上下文
-	BALANCED_G4T_18K = "Balanced-g4t-18k" // 平衡 GPT4-Turbo, 18k上下文
-	CREATIVE_G4T_18K = "Creative-g4t-18k" // 创造 GPT4-Turbo, 18k上下文
+	PRECISE_G4T_18K  = "Precise-g4t-18k"
+	BALANCED_G4T_18K = "Balanced-g4t-18k"
+	CREATIVE_G4T_18K = "Creative-g4t-18k"
 )
 
 var ChatModels = [21]string{BALANCED, BALANCED_OFFLINE, CREATIVE, CREATIVE_OFFLINE, PRECISE, PRECISE_OFFLINE, BALANCED_G4T, BALANCED_G4T_OFFLINE, CREATIVE_G4T, CREATIVE_G4T_OFFLINE, PRECISE_G4T, PRECISE_G4T_OFFLINE,
@@ -90,40 +90,56 @@ func (chat *Chat) GetTone() string {
 }
 
 func (chat *Chat) NewConversation() error {
-	c := request.NewRequest()
-	c.SetHeader("Host", "www.bing.com")
-	c.SetHeader("Origin", "https://www.bing.com")
-	c.SetUrl(fmt.Sprintf(bingCreateConversationUrl, chat.BingBaseUrl)).
-		SetUserAgent(userAgent).
-		SetCookies(chat.cookies).
-		SetHeader("Accept", "application/json").
-		SetHeader("Accept-Language", "en-US;q=0.9").
-		SetHeader("Referer", "https://www.bing.com/chat?q=Bing+AI&showconv=1&FORM=hpcodx").
-		SetHeader("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Microsoft Edge\";v=\"120\"").
-		SetHeader("Sec-Ch-Ua-Arch", "\"x86\"").
-		SetHeader("Sec-Ch-Ua-Bitness", "\"64\"").
-		SetHeader("Sec-Ch-Ua-Full-Version", "\"120.0.2210.133\"").
-		SetHeader("Sec-Ch-Ua-Full-Version-List", "\"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"120.0.6099.217\", \"Microsoft Edge\";v=\"120.0.2210.133\"").
-		SetHeader("Sec-Ch-Ua-Mobile", "?0").
-		SetHeader("Sec-Ch-Ua-Model", "\"\"").
-		SetHeader("Sec-Ch-Ua-Platform", "\"Windows\"").
-		SetHeader("Sec-Ch-Ua-Platform-Version", "\"15.0.0\"").
-		SetHeader("Sec-Fetch-Dest", "empty").
-		SetHeader("Sec-Fetch-Mode", "cors").
-		SetHeader("Sec-Fetch-Site", "same-origin").
-		SetHeader("X-Ms-Useragent", "azsdk-js-api-client-factory/1.0.0-beta.1 core-rest-pipeline/1.12.3 OS/Windows").
-		SetHeader("X-Ms-Client-Request-Id", uuid.NewString()).
-		Do()
-
-	var resp ChatReq
-	err := json.Unmarshal(c.GetBody(), &resp)
+	URL := fmt.Sprintf(bingCreateConversationUrl, chat.BingBaseUrl)
+	req, err := http.NewRequest("GET", URL, nil)
 	if err != nil {
 		return err
 	}
-	resp.ConversationSignature = c.GetHeader("X-Sydney-Conversationsignature")
-	resp.EncryptedConversationSignature = c.GetHeader("X-Sydney-Encryptedconversationsignature")
+	req.Header.Set("Host", "www.bing.com")
+	req.Header.Set("Origin", "https://www.bing.com")
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Cookie", chat.cookies)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Language", "en-US;q=0.9")
+	req.Header.Set("Referer", "https://www.bing.com/chat?q=Bing+AI&showconv=1&FORM=hpcodx")
+	req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Microsoft Edge\";v=\"120\"")
+	req.Header.Set("Sec-Ch-Ua-Arch", "\"x86\"")
+	req.Header.Set("Sec-Ch-Ua-Bitness", "\"64\"")
+	req.Header.Set("Sec-Ch-Ua-Full-Version", "\"120.0.2210.133\"")
+	req.Header.Set("Sec-Ch-Ua-Full-Version-List", "\"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"120.0.6099.217\", \"Microsoft Edge\";v=\"120.0.2210.133\"")
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Model", "\"\"")
+	req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
+	req.Header.Set("Sec-Ch-Ua-Platform-Version", "\"15.0.0\"")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("X-Ms-Useragent", "azsdk-js-api-client-factory/1.0.0-beta.1 core-rest-pipeline/1.12.3 OS/Windows")
+	req.Header.Set("X-Ms-Client-Request-Id", uuid.NewString())
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	bytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
 
-	chat.chatHub = newChatHub(resp)
+	var chatReq ChatReq
+	err = json.Unmarshal(bytes, &chatReq)
+	if err != nil {
+		return err
+	}
+	chatReq.ConversationSignature = res.Header.Get("X-Sydney-Conversationsignature")
+	chatReq.EncryptedConversationSignature = res.Header.Get("X-Sydney-Encryptedconversationsignature")
+
+	chat.chatHub = newChatHub(chatReq)
 
 	return nil
 }
@@ -488,34 +504,50 @@ func (chat *Chat) imageUploadHandler(image string) (string, error) {
 		p2, _ := bw.CreateFormField("imageBase64")
 		p2.Write([]byte(strings.ReplaceAll(image, " ", "+")))
 		bw.Close()
-		c := request.NewRequest()
-		c.SetHeader("Host", "www.bing.com")
-		c.SetHeader("Origin", "https://www.bing.com")
-		c.Post().SetUrl(fmt.Sprintf(imagesKblob, chat.BingBaseUrl)).
-			SetBody(buf).
-			SetUserAgent(userAgent).
-			SetCookies(chat.cookies).
-			SetContentType("multipart/form-data").
-			SetHeader("Referer", "https://www.bing.com/chat?q=Bing+AI&showconv=1&FORM=hpcodx").
-			SetHeader("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Microsoft Edge\";v=\"120\"").
-			SetHeader("Sec-Ch-Ua-Arch", "\"x86\"").
-			SetHeader("Sec-Ch-Ua-Bitness", "\"64\"").
-			SetHeader("Sec-Ch-Ua-Full-Version", "\"120.0.2210.133\"").
-			SetHeader("Sec-Ch-Ua-Full-Version-List", "\"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"120.0.6099.217\", \"Microsoft Edge\";v=\"120.0.2210.133\"").
-			SetHeader("Sec-Ch-Ua-Mobile", "?0").
-			SetHeader("Sec-Ch-Ua-Model", "\"\"").
-			SetHeader("Sec-Ch-Ua-Platform", "\"Windows\"").
-			SetHeader("Sec-Ch-Ua-Platform-Version", "\"15.0.0\"").
-			SetHeader("Sec-Fetch-Dest", "empty").
-			SetHeader("Sec-Fetch-Mode", "cors").
-			SetHeader("Sec-Fetch-Site", "same-origin").
-			Do()
-		var resp imageUploadStruct
-		err := json.Unmarshal(c.GetBody(), &resp)
+
+		URL := fmt.Sprintf(imagesKblob, chat.BingBaseUrl)
+		req, err := http.NewRequest("POST", URL, buf)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf(imageUploadUrl, chat.BingBaseUrl, resp.BlobId), nil
+		req.Header.Set("Host", "www.bing.com")
+		req.Header.Set("Origin", "https://www.bing.com")
+		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("Cookie", chat.cookies)
+		req.Header.Set("Content-Type", "multipart/form-data")
+		req.Header.Set("Referer", "https://www.bing.com/chat?q=Bing+AI&showconv=1&FORM=hpcodx")
+		req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Microsoft Edge\";v=\"120\"")
+		req.Header.Set("Sec-Ch-Ua-Arch", "\"x86\"")
+		req.Header.Set("Sec-Ch-Ua-Bitness", "\"64\"")
+		req.Header.Set("Sec-Ch-Ua-Full-Version", "\"120.0.2210.133\"")
+		req.Header.Set("Sec-Ch-Ua-Full-Version-List", "\"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"120.0.6099.217\", \"Microsoft Edge\";v=\"120.0.2210.133\"")
+		req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+		req.Header.Set("Sec-Ch-Ua-Model", "\"\"")
+		req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
+		req.Header.Set("Sec-Ch-Ua-Platform-Version", "\"15.0.0\"")
+		req.Header.Set("Sec-Fetch-Dest", "empty")
+		req.Header.Set("Sec-Fetch-Mode", "cors")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		client := &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		res, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer res.Body.Close()
+		bytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return "", err
+		}
+		var image imageUploadStruct
+		err = json.Unmarshal(bytes, &image)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf(imageUploadUrl, chat.BingBaseUrl, image.BlobId), nil
 	}
 	return "", nil
 }
